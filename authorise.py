@@ -15,6 +15,7 @@ def register_user(username,password):
     with open("users.txt","a") as f:
         f.write(f"{username},{hashed_password}")
     print(f"User {username} registered.")
+    print("Hello")
     
 def login_user(usernem,password):
     with open("users.txt","r") as f:
