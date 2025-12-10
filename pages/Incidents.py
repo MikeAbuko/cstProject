@@ -1,10 +1,16 @@
 # Week 9 - Incidents Page (CRUD Operations)
-# Create, Read, Update, Delete cyber incidents
+# Create, Read, Update, Delete cyber security incidents
 
 import streamlit as st
 import pandas as pd
-from app.data.db import connect_database
 from datetime import datetime
+# Import Week 8 functions
+from app.data.incidents import (
+    get_all_incidents,
+    insert_incident,
+    update_incident_status,
+    delete_incident
+)
 
 # Page configuration
 st.set_page_config(
@@ -19,49 +25,9 @@ if 'logged_in' not in st.session_state or not st.session_state.logged_in:
     st.info("👈 Go to Home page to login")
     st.stop()
 
-# Database functions
-def get_all_incidents():
-    """Fetch all incidents from database"""
-    conn = connect_database()
-    query = "SELECT * FROM cyber_incidents ORDER BY date DESC"
-    df = pd.read_sql_query(query, conn)
-    conn.close()
-    return df
-
-def add_incident(incident_type, severity, description, incident_date, affected_systems):
-    """Add new incident to database"""
-    conn = connect_database()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO cyber_incidents (incident_type, severity, description, incident_date, affected_systems)
-        VALUES (?, ?, ?, ?, ?)
-    """, (incident_type, severity, description, incident_date, affected_systems))
-    conn.commit()
-    conn.close()
-
-def update_incident(incident_id, incident_type, severity, description, incident_date, affected_systems):
-    """Update existing incident"""
-    conn = connect_database()
-    cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE cyber_incidents 
-        SET incident_type=?, severity=?, description=?, incident_date=?, affected_systems=?
-        WHERE id=?
-    """, (incident_type, severity, description, incident_date, affected_systems, incident_id))
-    conn.commit()
-    conn.close()
-
-def delete_incident(incident_id):
-    """Delete incident from database"""
-    conn = connect_database()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM cyber_incidents WHERE id=?", (incident_id,))
-    conn.commit()
-    conn.close()
-
 # Main page
 st.title("🚨 Cyber Incidents Management")
-st.markdown("Create, view, update, and delete cyber security incidents")
+st.markdown("Create, view, update, and delete cybersecurity incidents")
 
 # Tabs for different operations
 tab1, tab2, tab3, tab4 = st.tabs(["📋 View All", "➕ Add New", "✏️ Update", "🗑️ Delete"])
@@ -76,11 +42,45 @@ with tab1:
         if df.empty:
             st.info("No incidents found. Add some incidents using the 'Add New' tab.")
         else:
-            st.dataframe(df, use_container_width=True, hide_index=True)
-            st.success(f"Total incidents: {len(df)}")
+            # Filters
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                filter_severity = st.multiselect(
+                    "Filter by Severity",
+                    ["Low", "Medium", "High", "Critical"]
+                )
+            
+            with col2:
+                filter_status = st.multiselect(
+                    "Filter by Status",
+                    ["Open", "Investigating", "Resolved", "Closed"]
+                )
+            
+            with col3:
+                filter_type = st.multiselect(
+                    "Filter by Type",
+                    df['incident_type'].unique().tolist()
+                )
+            
+            # Apply filters - start with all data
+            filtered_df = df.copy()
+            
+            if filter_severity:
+                filtered_df = filtered_df[filtered_df['severity'].isin(filter_severity)]
+            
+            if filter_status:
+                filtered_df = filtered_df[filtered_df['status'].isin(filter_status)]
+            
+            if filter_type:
+                filtered_df = filtered_df[filtered_df['incident_type'].isin(filter_type)]
+            
+            # Display table
+            st.dataframe(filtered_df, use_container_width=True, hide_index=True)
+            st.success(f"Total incidents: {len(filtered_df)}")
             
             # Download button
-            csv = df.to_csv(index=False)
+            csv = filtered_df.to_csv(index=False)
             st.download_button(
                 label="📥 Download as CSV",
                 data=csv,
@@ -92,15 +92,18 @@ with tab1:
 
 # TAB 2: Add New Incident
 with tab2:
-    st.subheader("Add New Incident")
+    st.subheader("Report New Incident")
     
     with st.form("add_incident_form"):
         col1, col2 = st.columns(2)
         
         with col1:
+            date = st.date_input("Date", value=datetime.now())
+            
             incident_type = st.selectbox(
                 "Incident Type",
-                ["Malware", "Phishing", "Data Breach", "DDoS Attack", "Unauthorized Access", "Other"]
+                ["Phishing", "Malware", "DDoS", "Data Breach", "Ransomware", 
+                 "Insider Threat", "Social Engineering", "SQL Injection", "Other"]
             )
             
             severity = st.selectbox(
@@ -109,33 +112,44 @@ with tab2:
             )
         
         with col2:
-            incident_date = st.date_input("Incident Date", value=datetime.now())
-            affected_systems = st.text_input("Affected Systems", placeholder="e.g., Server-01, Database-Main")
+            status = st.selectbox(
+                "Status",
+                ["Open", "Investigating", "Resolved", "Closed"]
+            )
+            
+            reported_by = st.text_input(
+                "Reported By",
+                value=st.session_state.username
+            )
         
-        description = st.text_area("Description", placeholder="Describe the incident in detail...")
+        description = st.text_area(
+            "Incident Description",
+            placeholder="Describe the incident in detail..."
+        )
         
-        submit = st.form_submit_button("Add Incident", type="primary", use_container_width=True)
+        submit = st.form_submit_button("Report Incident", type="primary", use_container_width=True)
         
         if submit:
             if not description:
                 st.error("❌ Description is required!")
             else:
                 try:
-                    add_incident(
-                        incident_type,
-                        severity,
-                        description,
-                        str(incident_date),
-                        affected_systems
+                    id = insert_incident(
+                        date=str(date),
+                        incident_type=incident_type,
+                        severity=severity,
+                        status=status,
+                        description=description,
+                        reported_by=reported_by
                     )
-                    st.success("✅ Incident added successfully!")
+                    st.success(f"✅ Incident #{id} reported successfully!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"❌ Error adding incident: {e}")
 
 # TAB 3: Update Incident
 with tab3:
-    st.subheader("Update Existing Incident")
+    st.subheader("Update Incident Status")
     
     try:
         df = get_all_incidents()
@@ -152,42 +166,30 @@ with tab3:
                 incident_id = incident_options[selected]
                 incident = df[df['id'] == incident_id].iloc[0]
                 
+                st.markdown("### Current Incident Details")
+                st.write(f"**Type:** {incident['incident_type']}")
+                st.write(f"**Severity:** {incident['severity']}")
+                st.write(f"**Current Status:** {incident['status']}")
+                st.write(f"**Date:** {incident['date']}")
+                st.write(f"**Reported By:** {incident['reported_by']}")
+                
                 with st.form("update_incident_form"):
-                    col1, col2 = st.columns(2)
+                    new_status = st.selectbox(
+                        "New Status",
+                        ["Open", "Investigating", "Resolved", "Closed"],
+                        index=["Open", "Investigating", "Resolved", "Closed"].index(incident['status'])
+                    )
                     
-                    with col1:
-                        new_type = st.selectbox(
-                            "Incident Type",
-                            ["Malware", "Phishing", "Data Breach", "DDoS Attack", "Unauthorized Access", "Other"],
-                            index=["Malware", "Phishing", "Data Breach", "DDoS Attack", "Unauthorized Access", "Other"].index(incident['incident_type'])
-                        )
-                        
-                        new_severity = st.selectbox(
-                            "Severity",
-                            ["Low", "Medium", "High", "Critical"],
-                            index=["Low", "Medium", "High", "Critical"].index(incident['severity'])
-                        )
-                    
-                    with col2:
-                        new_date = st.date_input("Incident Date", value=pd.to_datetime(incident['incident_date']))
-                        new_systems = st.text_input("Affected Systems", value=incident['affected_systems'])
-                    
-                    new_description = st.text_area("Description", value=incident['description'])
-                    
-                    update_btn = st.form_submit_button("Update Incident", type="primary", use_container_width=True)
+                    update_btn = st.form_submit_button("Update Status", type="primary", use_container_width=True)
                     
                     if update_btn:
                         try:
-                            update_incident(
-                                incident_id,
-                                new_type,
-                                new_severity,
-                                new_description,
-                                str(new_date),
-                                new_systems
-                            )
-                            st.success("✅ Incident updated successfully!")
-                            st.rerun()
+                            rows = update_incident_status(incident_id, new_status)
+                            if rows > 0:
+                                st.success(f"✅ Incident #{incident_id} updated to {new_status}!")
+                                st.rerun()
+                            else:
+                                st.error("❌ Failed to update incident")
                         except Exception as e:
                             st.error(f"❌ Error updating incident: {e}")
     
@@ -217,21 +219,28 @@ with tab4:
                 # Show incident details
                 st.markdown("### Incident Details")
                 col1, col2 = st.columns(2)
+                
                 with col1:
+                    st.write(f"**ID:** {incident['id']}")
+                    st.write(f"**Date:** {incident['date']}")
                     st.write(f"**Type:** {incident['incident_type']}")
                     st.write(f"**Severity:** {incident['severity']}")
+                
                 with col2:
-                    st.write(f"**Date:** {incident['incident_date']}")
-                    st.write(f"**Systems:** {incident['affected_systems']}")
+                    st.write(f"**Status:** {incident['status']}")
+                    st.write(f"**Reported By:** {incident['reported_by']}")
                 
                 st.write(f"**Description:** {incident['description']}")
                 
                 # Confirm deletion
                 if st.button("🗑️ Delete This Incident", type="primary", use_container_width=True):
                     try:
-                        delete_incident(incident_id)
-                        st.success("✅ Incident deleted successfully!")
-                        st.rerun()
+                        rows = delete_incident(incident_id)
+                        if rows > 0:
+                            st.success(f"✅ Incident #{incident_id} deleted successfully!")
+                            st.rerun()
+                        else:
+                            st.error("❌ Failed to delete incident")
                     except Exception as e:
                         st.error(f"❌ Error deleting incident: {e}")
     

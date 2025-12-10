@@ -1,16 +1,17 @@
 # Week 9 - Analytics Page
-# Data visualization and charts
+# Simple charts to visualize data
 
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
-from app.data.db import connect_database
+from app.data.incidents import get_all_incidents
+from app.data.datasets import get_all_datasets
+from app.data.tickets import get_all_tickets
 
 # Page configuration
 st.set_page_config(
     page_title="Analytics",
-    page_icon="📈",
+    page_icon="📊",
     layout="wide"
 )
 
@@ -20,286 +21,204 @@ if 'logged_in' not in st.session_state or not st.session_state.logged_in:
     st.info("👈 Go to Home page to login")
     st.stop()
 
-# Fetch data functions
-def get_incidents_data():
-    conn = connect_database()
-    query = "SELECT * FROM cyber_incidents"
-    df = pd.read_sql_query(query, conn)
-    conn.close()
-    return df
+# Page title
+st.title("📊 Analytics Dashboard")
+st.markdown("View charts and statistics")
 
-def get_datasets_data():
-    conn = connect_database()
-    query = "SELECT * FROM datasets_metadata"
-    df = pd.read_sql_query(query, conn)
-    conn.close()
-    return df
+# Get data from database
+try:
+    incidents_df = get_all_incidents()
+    datasets_df = get_all_datasets()
+    tickets_df = get_all_tickets()
+except Exception as e:
+    st.error(f"Error loading data: {e}")
+    st.stop()
 
-def get_tickets_data():
-    conn = connect_database()
-    query = "SELECT * FROM it_tickets"
-    df = pd.read_sql_query(query, conn)
-    conn.close()
-    return df
+# Show summary numbers at top
+st.subheader("📈 Summary")
 
-# Main page
-st.title("📈 Analytics & Visualization")
-st.markdown("Visualize data from all modules")
+col1, col2, col3 = st.columns(3)
 
-# Section selector
-analysis_type = st.selectbox(
-    "Select Analysis Type",
-    ["Overview", "Cyber Incidents", "Datasets", "IT Tickets"]
-)
+with col1:
+    total_incidents = len(incidents_df) if not incidents_df.empty else 0
+    st.metric("🚨 Total Incidents", total_incidents)
 
-# OVERVIEW SECTION
-if analysis_type == "Overview":
-    st.subheader("📊 System Overview")
+with col2:
+    total_datasets = len(datasets_df) if not datasets_df.empty else 0
+    st.metric("📁 Total Datasets", total_datasets)
+
+with col3:
+    total_tickets = len(tickets_df) if not tickets_df.empty else 0
+    st.metric("🎫 Total Tickets", total_tickets)
+
+st.divider()
+
+# Create tabs for different sections
+tab1, tab2, tab3 = st.tabs(["🚨 Incidents", "🎫 Tickets", "📁 Datasets"])
+
+# TAB 1: Incidents
+with tab1:
+    st.subheader("Incident Analytics")
     
-    try:
-        # Get all data
-        incidents_df = get_incidents_data()
-        datasets_df = get_datasets_data()
-        tickets_df = get_tickets_data()
-        
-        # Create metrics
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.metric("🚨 Total Incidents", len(incidents_df))
-        with col2:
-            st.metric("📁 Total Datasets", len(datasets_df))
-        with col3:
-            st.metric("🎫 Total Tickets", len(tickets_df))
-        
-        st.markdown("---")
-        
-        # Create overview charts
+    if incidents_df.empty:
+        st.info("No incidents yet. Add some incidents to see charts!")
+    else:
+        # Show two columns
         col1, col2 = st.columns(2)
         
         with col1:
-            # Data distribution pie chart
-            data_counts = pd.DataFrame({
-                'Category': ['Incidents', 'Datasets', 'Tickets'],
-                'Count': [len(incidents_df), len(datasets_df), len(tickets_df)]
-            })
-            
-            fig = px.pie(data_counts, values='Count', names='Category', 
-                        title='Data Distribution Across Modules')
+            st.markdown("#### Incidents by Type")
+            # Count how many of each type
+            type_counts = incidents_df['incident_type'].value_counts()
+            # Make a bar chart
+            fig = px.bar(
+                x=type_counts.index,
+                y=type_counts.values,
+                labels={'x': 'Type', 'y': 'Count'},
+                color=type_counts.values,
+                color_continuous_scale='Reds'
+            )
             st.plotly_chart(fig, use_container_width=True)
         
         with col2:
-            # Status summary
-            st.markdown("### 📋 Quick Stats")
-            st.info(f"**Incidents:** {len(incidents_df)} records")
-            st.info(f"**Datasets:** {len(datasets_df)} records")
-            st.info(f"**Tickets:** {len(tickets_df)} records")
-            total = len(incidents_df) + len(datasets_df) + len(tickets_df)
-            st.success(f"**Total Records:** {total}")
-    
-    except Exception as e:
-        st.error(f"Error loading overview: {e}")
-
-# CYBER INCIDENTS SECTION
-elif analysis_type == "Cyber Incidents":
-    st.subheader("🚨 Cyber Incidents Analytics")
-    
-    try:
-        df = get_incidents_data()
+            st.markdown("#### Incidents by Severity")
+            # Count how many of each severity
+            severity_counts = incidents_df['severity'].value_counts()
+            # Make a pie chart
+            fig = px.pie(
+                values=severity_counts.values,
+                names=severity_counts.index,
+                color=severity_counts.index,
+                color_discrete_map={
+                    'Critical': 'red',
+                    'High': 'orange',
+                    'Medium': 'yellow',
+                    'Low': 'green'
+                }
+            )
+            st.plotly_chart(fig, use_container_width=True)
         
-        if df.empty:
-            st.info("No incident data available.")
-        else:
-            # Metrics
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                st.metric("Total Incidents", len(df))
-            with col2:
-                critical_count = len(df[df['severity'] == 'Critical'])
-                st.metric("Critical", critical_count)
-            with col3:
-                high_count = len(df[df['severity'] == 'High'])
-                st.metric("High", high_count)
-            with col4:
-                medium_count = len(df[df['severity'] == 'Medium'])
-                st.metric("Medium", medium_count)
-            
-            st.markdown("---")
-            
-            # Charts
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # Incidents by severity
-                severity_counts = df['severity'].value_counts().reset_index()
-                severity_counts.columns = ['Severity', 'Count']
-                
-                fig1 = px.bar(severity_counts, x='Severity', y='Count',
-                             title='Incidents by Severity',
-                             color='Severity',
-                             color_discrete_map={
-                                 'Critical': '#dc3545',
-                                 'High': '#fd7e14',
-                                 'Medium': '#ffc107',
-                                 'Low': '#28a745'
-                             })
-                st.plotly_chart(fig1, use_container_width=True)
-            
-            with col2:
-                # Incidents by type
-                type_counts = df['incident_type'].value_counts().reset_index()
-                type_counts.columns = ['Type', 'Count']
-                
-                fig2 = px.pie(type_counts, values='Count', names='Type',
-                             title='Incidents by Type')
-                st.plotly_chart(fig2, use_container_width=True)
-            
-            # Timeline
-            st.markdown("### 📅 Incident Timeline")
-            df['incident_date'] = pd.to_datetime(df['incident_date'])
-            df_sorted = df.sort_values('incident_date')
-            
-            fig3 = px.scatter(df_sorted, x='incident_date', y='severity',
-                            color='incident_type', size_max=15,
-                            title='Incident Timeline',
-                            labels={'incident_date': 'Date', 'severity': 'Severity'})
-            st.plotly_chart(fig3, use_container_width=True)
-    
-    except Exception as e:
-        st.error(f"Error loading incident analytics: {e}")
-
-# DATASETS SECTION
-elif analysis_type == "Datasets":
-    st.subheader("📁 Dataset Analytics")
-    
-    try:
-        df = get_datasets_data()
+        st.divider()
         
-        if df.empty:
-            st.info("No dataset data available.")
-        else:
-            # Metrics
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                st.metric("Total Datasets", len(df))
-            with col2:
-                unique_types = df['data_type'].nunique()
-                st.metric("Data Types", unique_types)
-            with col3:
-                unique_sources = df['source'].nunique()
-                st.metric("Unique Sources", unique_sources)
-            
-            st.markdown("---")
-            
-            # Charts
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # Datasets by type
-                type_counts = df['data_type'].value_counts().reset_index()
-                type_counts.columns = ['Type', 'Count']
-                
-                fig1 = px.bar(type_counts, x='Type', y='Count',
-                             title='Datasets by Type',
-                             color='Type')
-                st.plotly_chart(fig1, use_container_width=True)
-            
-            with col2:
-                # Datasets by source
-                source_counts = df['source'].value_counts().head(10).reset_index()
-                source_counts.columns = ['Source', 'Count']
-                
-                fig2 = px.pie(source_counts, values='Count', names='Source',
-                             title='Top 10 Dataset Sources')
-                st.plotly_chart(fig2, use_container_width=True)
-            
-            # Timeline
-            st.markdown("### 📅 Dataset Collection Timeline")
-            df['collection_date'] = pd.to_datetime(df['collection_date'])
-            df_sorted = df.sort_values('collection_date')
-            
-            # Count by month
-            df['month'] = df_sorted['collection_date'].dt.to_period('M').astype(str)
-            monthly_counts = df.groupby('month').size().reset_index(name='count')
-            
-            fig3 = px.line(monthly_counts, x='month', y='count',
-                          title='Datasets Collected Over Time',
-                          labels={'month': 'Month', 'count': 'Number of Datasets'})
-            st.plotly_chart(fig3, use_container_width=True)
-    
-    except Exception as e:
-        st.error(f"Error loading dataset analytics: {e}")
+        # Status chart
+        st.markdown("#### Incidents by Status")
+        status_counts = incidents_df['status'].value_counts()
+        fig = px.bar(
+            x=status_counts.index,
+            y=status_counts.values,
+            labels={'x': 'Status', 'y': 'Count'},
+            color=status_counts.values,
+            color_continuous_scale='Blues'
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
-# IT TICKETS SECTION
-elif analysis_type == "IT Tickets":
-    st.subheader("🎫 IT Tickets Analytics")
+# TAB 2: Tickets
+with tab2:
+    st.subheader("Ticket Analytics")
     
-    try:
-        df = get_tickets_data()
+    if tickets_df.empty:
+        st.info("No tickets yet. Add some tickets to see charts!")
+    else:
+        # Show two columns
+        col1, col2 = st.columns(2)
         
-        if df.empty:
-            st.info("No ticket data available.")
-        else:
-            # Metrics
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                st.metric("Total Tickets", len(df))
-            with col2:
-                open_count = len(df[df['status'] == 'Open'])
-                st.metric("Open", open_count)
-            with col3:
-                in_progress = len(df[df['status'] == 'In Progress'])
-                st.metric("In Progress", in_progress)
-            with col4:
-                resolved = len(df[df['status'] == 'Resolved'])
-                st.metric("Resolved", resolved)
-            
-            st.markdown("---")
-            
-            # Charts
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # Tickets by status
-                status_counts = df['status'].value_counts().reset_index()
-                status_counts.columns = ['Status', 'Count']
-                
-                fig1 = px.bar(status_counts, x='Status', y='Count',
-                             title='Tickets by Status',
-                             color='Status',
-                             color_discrete_map={
-                                 'Open': '#ffc107',
-                                 'In Progress': '#17a2b8',
-                                 'Resolved': '#28a745',
-                                 'Closed': '#6c757d'
-                             })
-                st.plotly_chart(fig1, use_container_width=True)
-            
-            with col2:
-                # Tickets by priority
-                priority_counts = df['priority'].value_counts().reset_index()
-                priority_counts.columns = ['Priority', 'Count']
-                
-                fig2 = px.pie(priority_counts, values='Count', names='Priority',
-                             title='Tickets by Priority',
-                             color_discrete_sequence=px.colors.sequential.RdBu)
-                st.plotly_chart(fig2, use_container_width=True)
-            
-            # Status by Priority
-            st.markdown("### 📊 Status Distribution by Priority")
-            priority_status = df.groupby(['priority', 'status']).size().reset_index(name='count')
-            
-            fig3 = px.bar(priority_status, x='priority', y='count', color='status',
-                         title='Ticket Status by Priority',
-                         labels={'priority': 'Priority', 'count': 'Number of Tickets'},
-                         barmode='group')
-            st.plotly_chart(fig3, use_container_width=True)
+        with col1:
+            st.markdown("#### Tickets by Priority")
+            # Count how many of each priority
+            priority_counts = tickets_df['priority'].value_counts()
+            # Make a pie chart
+            fig = px.pie(
+                values=priority_counts.values,
+                names=priority_counts.index,
+                color=priority_counts.index,
+                color_discrete_map={
+                    'Critical': 'red',
+                    'High': 'orange',
+                    'Medium': 'yellow',
+                    'Low': 'green'
+                }
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            st.markdown("#### Tickets by Status")
+            # Count how many of each status
+            status_counts = tickets_df['status'].value_counts()
+            # Make a bar chart
+            fig = px.bar(
+                x=status_counts.index,
+                y=status_counts.values,
+                labels={'x': 'Status', 'y': 'Count'},
+                color=status_counts.values,
+                color_continuous_scale='Greens'
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        
+        st.divider()
+        
+        # Category chart
+        st.markdown("#### Tickets by Category")
+        category_counts = tickets_df['category'].value_counts()
+        fig = px.bar(
+            x=category_counts.index,
+            y=category_counts.values,
+            labels={'x': 'Category', 'y': 'Count'},
+            color=category_counts.values,
+            color_continuous_scale='Purples'
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+# TAB 3: Datasets
+with tab3:
+    st.subheader("Dataset Analytics")
     
-    except Exception as e:
-        st.error(f"Error loading ticket analytics: {e}")
+    if datasets_df.empty:
+        st.info("No datasets yet. Add some datasets to see charts!")
+    else:
+        # Show summary numbers
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            total_records = datasets_df['record_count'].sum()
+            st.metric("📊 Total Records", f"{total_records:,}")
+        
+        with col2:
+            total_size = datasets_df['file_size_mb'].sum()
+            st.metric("💾 Total Size", f"{total_size:.1f} MB")
+        
+        st.divider()
+        
+        # Show two columns
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("#### Datasets by Category")
+            # Count how many of each category
+            category_counts = datasets_df['category'].value_counts()
+            # Make a bar chart
+            fig = px.bar(
+                x=category_counts.index,
+                y=category_counts.values,
+                labels={'x': 'Category', 'y': 'Count'},
+                color=category_counts.values,
+                color_continuous_scale='Teal'
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            st.markdown("#### Top 5 Largest Datasets")
+            # Get the 5 biggest datasets
+            top5 = datasets_df.nlargest(5, 'file_size_mb')
+            # Make a bar chart
+            fig = px.bar(
+                top5,
+                x='dataset_name',
+                y='file_size_mb',
+                labels={'dataset_name': 'Dataset', 'file_size_mb': 'Size (MB)'},
+                color='file_size_mb',
+                color_continuous_scale='Blues'
+            )
+            st.plotly_chart(fig, use_container_width=True)
 
 # Footer
 st.markdown("---")

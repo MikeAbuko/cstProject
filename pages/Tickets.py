@@ -3,8 +3,14 @@
 
 import streamlit as st
 import pandas as pd
-from app.data.db import connect_database
 from datetime import datetime
+# Import Week 8 functions
+from app.data.tickets import (
+    get_all_tickets,
+    insert_ticket,
+    update_ticket_status,
+    delete_ticket
+)
 
 # Page configuration
 st.set_page_config(
@@ -19,46 +25,6 @@ if 'logged_in' not in st.session_state or not st.session_state.logged_in:
     st.info("👈 Go to Home page to login")
     st.stop()
 
-# Database functions
-def get_all_tickets():
-    """Fetch all tickets from database"""
-    conn = connect_database()
-    query = "SELECT * FROM it_tickets ORDER BY created_date DESC"
-    df = pd.read_sql_query(query, conn)
-    conn.close()
-    return df
-
-def add_ticket(ticket_subject, priority, status, requester, description, created_date):
-    """Add new ticket to database"""
-    conn = connect_database()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO it_tickets (ticket_subject, priority, status, requester, description, created_date)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (ticket_subject, priority, status, requester, description, created_date))
-    conn.commit()
-    conn.close()
-
-def update_ticket(ticket_id, ticket_subject, priority, status, requester, description, created_date):
-    """Update existing ticket"""
-    conn = connect_database()
-    cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE it_tickets 
-        SET ticket_subject=?, priority=?, status=?, requester=?, description=?, created_date=?
-        WHERE id=?
-    """, (ticket_subject, priority, status, requester, description, created_date, ticket_id))
-    conn.commit()
-    conn.close()
-
-def delete_ticket(ticket_id):
-    """Delete ticket from database"""
-    conn = connect_database()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM it_tickets WHERE id=?", (ticket_id,))
-    conn.commit()
-    conn.close()
-
 # Main page
 st.title("🎫 IT Support Tickets Management")
 st.markdown("Create, view, update, and delete IT support tickets")
@@ -71,7 +37,7 @@ with tab1:
     st.subheader("All IT Tickets")
     
     try:
-        df = get_all_tickets()
+        df = get_all_tickets()  # Uses function from app/data/tickets.py
         
         if df.empty:
             st.info("No tickets found. Add some tickets using the 'Add New' tab.")
@@ -113,48 +79,58 @@ with tab2:
         col1, col2 = st.columns(2)
         
         with col1:
-            ticket_subject = st.text_input("Ticket Subject", placeholder="Brief description of the issue")
+            ticket_id = st.text_input("Ticket ID", placeholder="e.g., TKT-001")
             
             priority = st.selectbox(
                 "Priority",
-                ["Low", "Medium", "High", "Urgent"]
+                ["Low", "Medium", "High", "Critical"]
             )
             
             status = st.selectbox(
                 "Status",
                 ["Open", "In Progress", "Resolved", "Closed"]
             )
+            
+            category = st.selectbox(
+                "Category",
+                ["Hardware", "Software", "Network", "Security", "Other"]
+            )
         
         with col2:
-            requester = st.text_input("Requester", placeholder="Name or email of the person requesting")
+            subject = st.text_input("Subject", placeholder="Brief description")
+            
+            assigned_to = st.text_input("Assigned To (optional)")
             
             created_date = st.date_input("Created Date", value=datetime.now())
         
-        description = st.text_area("Description", placeholder="Detailed description of the issue or request...")
+        description = st.text_area("Description", placeholder="Detailed description...")
         
         submit = st.form_submit_button("Create Ticket", type="primary", use_container_width=True)
         
         if submit:
-            if not ticket_subject or not description:
-                st.error("❌ Subject and description are required!")
+            if not ticket_id or not subject:
+                st.error("❌ Ticket ID and Subject are required!")
             else:
                 try:
-                    add_ticket(
-                        ticket_subject,
-                        priority,
-                        status,
-                        requester,
-                        description,
-                        str(created_date)
+                    # Use insert_ticket function
+                    id = insert_ticket(
+                        ticket_id=ticket_id,
+                        priority=priority,
+                        status=status,
+                        category=category,
+                        subject=subject, 
+                        description=description,
+                        created_date=str(created_date),
+                        assigned_to=assigned_to if assigned_to else None
                     )
-                    st.success("✅ Ticket created successfully!")
+                    st.success(f"✅ Ticket {ticket_id} created successfully!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"❌ Error creating ticket: {e}")
 
 # TAB 3: Update Ticket
 with tab3:
-    st.subheader("Update Existing Ticket")
+    st.subheader("Update Ticket Status")
     
     try:
         df = get_all_tickets()
@@ -163,59 +139,40 @@ with tab3:
             st.info("No tickets to update.")
         else:
             # Select ticket to update
-            ticket_options = {f"ID {row['id']}: {row['ticket_subject']} - {row['status']}": row['id'] 
+            ticket_options = {f"ID {row['id']}: {row['ticket_id']} - {row['subject']}": row['id'] 
                              for _, row in df.iterrows()}
             selected = st.selectbox("Select Ticket to Update", list(ticket_options.keys()))
             
             if selected:
-                ticket_id = ticket_options[selected]
-                ticket = df[df['id'] == ticket_id].iloc[0]
+                ticket_db_id = ticket_options[selected]
+                ticket = df[df['id'] == ticket_db_id].iloc[0]
+                
+                st.markdown("### Current Ticket Details")
+                st.write(f"**Ticket ID:** {ticket['ticket_id']}")
+                st.write(f"**Subject:** {ticket['subject']}")
+                st.write(f"**Current Status:** {ticket['status']}")
+                st.write(f"**Priority:** {ticket['priority']}")
                 
                 with st.form("update_ticket_form"):
-                    col1, col2 = st.columns(2)
+                    new_status = st.selectbox(
+                        "New Status",
+                        ["Open", "In Progress", "Resolved", "Closed"],
+                        index=["Open", "In Progress", "Resolved", "Closed"].index(ticket['status'])
+                    )
                     
-                    with col1:
-                        new_subject = st.text_input("Ticket Subject", value=ticket['ticket_subject'])
-                        
-                        new_priority = st.selectbox(
-                            "Priority",
-                            ["Low", "Medium", "High", "Urgent"],
-                            index=["Low", "Medium", "High", "Urgent"].index(ticket['priority'])
-                        )
-                        
-                        new_status = st.selectbox(
-                            "Status",
-                            ["Open", "In Progress", "Resolved", "Closed"],
-                            index=["Open", "In Progress", "Resolved", "Closed"].index(ticket['status'])
-                        )
-                    
-                    with col2:
-                        new_requester = st.text_input("Requester", value=ticket['requester'])
-                        
-                        new_date = st.date_input("Created Date", value=pd.to_datetime(ticket['created_date']))
-                    
-                    new_description = st.text_area("Description", value=ticket['description'])
-                    
-                    update_btn = st.form_submit_button("Update Ticket", type="primary", use_container_width=True)
+                    update_btn = st.form_submit_button("Update Status", type="primary", use_container_width=True)
                     
                     if update_btn:
-                        if not new_subject or not new_description:
-                            st.error("❌ Subject and description are required!")
-                        else:
-                            try:
-                                update_ticket(
-                                    ticket_id,
-                                    new_subject,
-                                    new_priority,
-                                    new_status,
-                                    new_requester,
-                                    new_description,
-                                    str(new_date)
-                                )
-                                st.success("✅ Ticket updated successfully!")
+                        try:
+                            # Use update_ticket_status function
+                            rows = update_ticket_status(ticket_db_id, new_status)
+                            if rows > 0:
+                                st.success(f"✅ Ticket {ticket['ticket_id']} updated to {new_status}!")
                                 st.rerun()
-                            except Exception as e:
-                                st.error(f"❌ Error updating ticket: {e}")
+                            else:
+                                st.error("❌ Failed to update ticket")
+                        except Exception as e:
+                            st.error(f"❌ Error updating ticket: {e}")
     
     except Exception as e:
         st.error(f"Error: {e}")
@@ -232,33 +189,39 @@ with tab4:
             st.info("No tickets to delete.")
         else:
             # Select ticket to delete
-            ticket_options = {f"ID {row['id']}: {row['ticket_subject']} - {row['status']}": row['id'] 
+            ticket_options = {f"ID {row['id']}: {row['ticket_id']} - {row['subject']}": row['id'] 
                              for _, row in df.iterrows()}
             selected = st.selectbox("Select Ticket to Delete", list(ticket_options.keys()))
             
             if selected:
-                ticket_id = ticket_options[selected]
-                ticket = df[df['id'] == ticket_id].iloc[0]
+                ticket_db_id = ticket_options[selected]
+                ticket = df[df['id'] == ticket_db_id].iloc[0]
                 
                 # Show ticket details
                 st.markdown("### Ticket Details")
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.write(f"**Subject:** {ticket['ticket_subject']}")
+                    st.write(f"**Ticket ID:** {ticket['ticket_id']}")
+                    st.write(f"**Subject:** {ticket['subject']}")
                     st.write(f"**Priority:** {ticket['priority']}")
                     st.write(f"**Status:** {ticket['status']}")
                 with col2:
-                    st.write(f"**Requester:** {ticket['requester']}")
+                    st.write(f"**Category:** {ticket['category']}")
                     st.write(f"**Created:** {ticket['created_date']}")
+                    st.write(f"**Assigned To:** {ticket.get('assigned_to', 'Unassigned')}")
                 
                 st.write(f"**Description:** {ticket['description']}")
                 
                 # Confirm deletion
                 if st.button("🗑️ Delete This Ticket", type="primary", use_container_width=True):
                     try:
-                        delete_ticket(ticket_id)
-                        st.success("✅ Ticket deleted successfully!")
-                        st.rerun()
+                        # Use delete_ticket function
+                        rows = delete_ticket(ticket_db_id)
+                        if rows > 0:
+                            st.success(f"✅ Ticket {ticket['ticket_id']} deleted successfully!")
+                            st.rerun()
+                        else:
+                            st.error("❌ Failed to delete ticket")
                     except Exception as e:
                         st.error(f"❌ Error deleting ticket: {e}")
     

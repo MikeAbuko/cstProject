@@ -3,8 +3,14 @@
 
 import streamlit as st
 import pandas as pd
-from app.data.db import connect_database
 from datetime import datetime
+# Import Week 8 functions
+from app.data.datasets import (
+    get_all_datasets,
+    insert_dataset,
+    update_dataset_records,
+    delete_dataset
+)
 
 # Page configuration
 st.set_page_config(
@@ -19,48 +25,8 @@ if 'logged_in' not in st.session_state or not st.session_state.logged_in:
     st.info("👈 Go to Home page to login")
     st.stop()
 
-# Database functions
-def get_all_datasets():
-    """Fetch all datasets from database"""
-    conn = connect_database()
-    query = "SELECT * FROM datasets_metadata ORDER BY last_updated DESC"
-    df = pd.read_sql_query(query, conn)
-    conn.close()
-    return df
-
-def add_dataset(dataset_name, source, collection_date, data_type, description):
-    """Add new dataset to database"""
-    conn = connect_database()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO datasets_metadata (dataset_name, source, collection_date, data_type, description)
-        VALUES (?, ?, ?, ?, ?)
-    """, (dataset_name, source, collection_date, data_type, description))
-    conn.commit()
-    conn.close()
-
-def update_dataset(dataset_id, dataset_name, source, collection_date, data_type, description):
-    """Update existing dataset"""
-    conn = connect_database()
-    cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE datasets_metadata 
-        SET dataset_name=?, source=?, collection_date=?, data_type=?, description=?
-        WHERE id=?
-    """, (dataset_name, source, collection_date, data_type, description, dataset_id))
-    conn.commit()
-    conn.close()
-
-def delete_dataset(dataset_id):
-    """Delete dataset from database"""
-    conn = connect_database()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM datasets_metadata WHERE id=?", (dataset_id,))
-    conn.commit()
-    conn.close()
-
 # Main page
-st.title("📁 Dataset Metadata Management")
+st.title("📁 Datasets Management")
 st.markdown("Create, view, update, and delete dataset metadata")
 
 # Tabs for different operations
@@ -76,11 +42,27 @@ with tab1:
         if df.empty:
             st.info("No datasets found. Add some datasets using the 'Add New' tab.")
         else:
-            st.dataframe(df, use_container_width=True, hide_index=True)
-            st.success(f"Total datasets: {len(df)}")
+            # Filter by category
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                filter_category = st.multiselect(
+                    "Filter by Category",
+                    df['category'].unique().tolist()
+                )
+            
+            # Apply filter - start with all data
+            filtered_df = df.copy()
+            
+            if filter_category:
+                filtered_df = filtered_df[filtered_df['category'].isin(filter_category)]
+            
+            # Display table
+            st.dataframe(filtered_df, use_container_width=True, hide_index=True)
+            st.success(f"Total datasets: {len(filtered_df)}")
             
             # Download button
-            csv = df.to_csv(index=False)
+            csv = filtered_df.to_csv(index=False)
             st.download_button(
                 label="📥 Download as CSV",
                 data=csv,
@@ -98,40 +80,46 @@ with tab2:
         col1, col2 = st.columns(2)
         
         with col1:
-            dataset_name = st.text_input("Dataset Name", placeholder="e.g., Customer Database 2024")
-            source = st.text_input("Source", placeholder="e.g., Internal Systems, API, Survey")
-            data_type = st.selectbox(
-                "Data Type",
-                ["Structured", "Unstructured", "Semi-Structured", "Time-Series", "Geospatial", "Other"]
+            dataset_name = st.text_input("Dataset Name", placeholder="e.g., Network Logs 2024")
+            
+            category = st.selectbox(
+                "Category",
+                ["Threat Intelligence", "Network Logs", "User Data", "System Logs", 
+                 "Malware Samples", "Security Reports", "Other"]
             )
+            
+            source = st.text_input("Source", placeholder="e.g., Internal Systems")
         
         with col2:
-            collection_date = st.date_input("Collection Date", value=datetime.now())
-        
-        description = st.text_area("Description", placeholder="Describe the dataset, its purpose, and contents...")
+            last_updated = st.date_input("Last Updated", value=datetime.now())
+            
+            record_count = st.number_input("Record Count", min_value=0, value=0, step=1)
+            
+            file_size_mb = st.number_input("File Size (MB)", min_value=0.0, value=0.0, step=0.1, format="%.2f")
         
         submit = st.form_submit_button("Add Dataset", type="primary", use_container_width=True)
         
         if submit:
-            if not dataset_name or not description:
-                st.error("❌ Dataset name and description are required!")
+            if not dataset_name or not source:
+                st.error("❌ Dataset Name and Source are required!")
             else:
                 try:
-                    add_dataset(
-                        dataset_name,
-                        source,
-                        str(collection_date),
-                        data_type,
-                        description
+                    id = insert_dataset(
+                        dataset_name=dataset_name,
+                        category=category,
+                        source=source,
+                        last_updated=str(last_updated),
+                        record_count=record_count,
+                        file_size_mb=file_size_mb
                     )
-                    st.success("✅ Dataset added successfully!")
+                    st.success(f"✅ Dataset '{dataset_name}' added successfully!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"❌ Error adding dataset: {e}")
 
 # TAB 3: Update Dataset
 with tab3:
-    st.subheader("Update Existing Dataset")
+    st.subheader("Update Dataset Record Count")
     
     try:
         df = get_all_datasets()
@@ -148,42 +136,33 @@ with tab3:
                 dataset_id = dataset_options[selected]
                 dataset = df[df['id'] == dataset_id].iloc[0]
                 
+                st.markdown("### Current Dataset Details")
+                st.write(f"**Name:** {dataset['dataset_name']}")
+                st.write(f"**Category:** {dataset['category']}")
+                st.write(f"**Current Record Count:** {dataset['record_count']}")
+                st.write(f"**Source:** {dataset['source']}")
+                st.write(f"**Last Updated:** {dataset['last_updated']}")
+                
                 with st.form("update_dataset_form"):
-                    col1, col2 = st.columns(2)
+                    new_count = st.number_input(
+                        "New Record Count",
+                        min_value=0,
+                        value=int(dataset['record_count']),
+                        step=1
+                    )
                     
-                    with col1:
-                        new_name = st.text_input("Dataset Name", value=dataset['dataset_name'])
-                        new_source = st.text_input("Source", value=dataset['source'])
-                        new_type = st.selectbox(
-                            "Data Type",
-                            ["Structured", "Unstructured", "Semi-Structured", "Time-Series", "Geospatial", "Other"],
-                            index=["Structured", "Unstructured", "Semi-Structured", "Time-Series", "Geospatial", "Other"].index(dataset['data_type'])
-                        )
-                    
-                    with col2:
-                        new_date = st.date_input("Collection Date", value=pd.to_datetime(dataset['collection_date']))
-                    
-                    new_description = st.text_area("Description", value=dataset['description'])
-                    
-                    update_btn = st.form_submit_button("Update Dataset", type="primary", use_container_width=True)
+                    update_btn = st.form_submit_button("Update Record Count", type="primary", use_container_width=True)
                     
                     if update_btn:
-                        if not new_name or not new_description:
-                            st.error("❌ Dataset name and description are required!")
-                        else:
-                            try:
-                                update_dataset(
-                                    dataset_id,
-                                    new_name,
-                                    new_source,
-                                    str(new_date),
-                                    new_type,
-                                    new_description
-                                )
-                                st.success("✅ Dataset updated successfully!")
+                        try:
+                            rows = update_dataset_records(dataset_id, new_count)
+                            if rows > 0:
+                                st.success(f"✅ Dataset '{dataset['dataset_name']}' updated!")
                                 st.rerun()
-                            except Exception as e:
-                                st.error(f"❌ Error updating dataset: {e}")
+                            else:
+                                st.error("❌ Failed to update dataset")
+                        except Exception as e:
+                            st.error(f"❌ Error updating dataset: {e}")
     
     except Exception as e:
         st.error(f"Error: {e}")
@@ -211,21 +190,27 @@ with tab4:
                 # Show dataset details
                 st.markdown("### Dataset Details")
                 col1, col2 = st.columns(2)
-                with col1:
-                    st.write(f"**Name:** {dataset['dataset_name']}")
-                    st.write(f"**Source:** {dataset['source']}")
-                with col2:
-                    st.write(f"**Type:** {dataset['data_type']}")
-                    st.write(f"**Date:** {dataset['collection_date']}")
                 
-                st.write(f"**Description:** {dataset['description']}")
+                with col1:
+                    st.write(f"**ID:** {dataset['id']}")
+                    st.write(f"**Name:** {dataset['dataset_name']}")
+                    st.write(f"**Category:** {dataset['category']}")
+                    st.write(f"**Source:** {dataset['source']}")
+                
+                with col2:
+                    st.write(f"**Record Count:** {dataset['record_count']}")
+                    st.write(f"**File Size:** {dataset['file_size_mb']} MB")
+                    st.write(f"**Last Updated:** {dataset['last_updated']}")
                 
                 # Confirm deletion
                 if st.button("🗑️ Delete This Dataset", type="primary", use_container_width=True):
                     try:
-                        delete_dataset(dataset_id)
-                        st.success("✅ Dataset deleted successfully!")
-                        st.rerun()
+                        rows = delete_dataset(dataset_id)
+                        if rows > 0:
+                            st.success(f"✅ Dataset '{dataset['dataset_name']}' deleted successfully!")
+                            st.rerun()
+                        else:
+                            st.error("❌ Failed to delete dataset")
                     except Exception as e:
                         st.error(f"❌ Error deleting dataset: {e}")
     
