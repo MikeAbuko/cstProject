@@ -24,8 +24,7 @@ env/
 .DS_Store
 Thumbs.db
 
-# My test files
-test_*.py
+
 
 # Streamlit secrets (contains API keys)
 .streamlit/secrets.toml
