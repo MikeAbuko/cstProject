@@ -12,7 +12,7 @@ venv/
 env/
 
 # Database files
-*.db
+#*.db
 *.sqlite
 *.sqlite3
 
@@ -23,7 +23,6 @@ env/
 # OS stuff
 .DS_Store
 Thumbs.db
-
 
 
 # Streamlit secrets (contains API keys)

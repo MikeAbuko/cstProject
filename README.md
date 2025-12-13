@@ -24,6 +24,49 @@ A web-based cybersecurity platform where users can manage security incidents, da
 - AI: HuggingFace AI (backup) + Groq (fast) + SerpAPI (current info)
 - Code Structure: Object-Oriented Programming with classes
 
+## Project Structure
+
+```
+cstProject/
+├── Home.py                          # Main login/register page (Week 9, improved Week 11)
+├── requirements.txt                 # All packages needed
+├── README.md                        # This file!
+│
+├── .streamlit/
+│   └── secrets.toml                 # API keys (not uploaded to GitHub)
+│
+├── app/
+│   ├── data/                        # Week 8 - Database functions
+│   │   ├── db.py                    # Connect to database
+│   │   ├── schema.py                # Create tables
+│   │   ├── users.py                 # User database operations
+│   │   ├── incidents.py             # Incident operations
+│   │   ├── datasets.py              # Dataset operations
+│   │   └── tickets.py               # Ticket operations
+│   │
+│   └── services/                    # Week 8, 10, 11 - Business logic
+│       ├── user_service.py          # Login/register functions (Week 8, improved Week 11)
+│       ├── ai_service.py            # AI integration (Week 10, enhanced Week 11)
+│       └── database_manager.py      # OOP database service (Week 11)
+│
+├── models/                          # Week 11 - OOP entity classes
+│   ├── user.py                      # User class
+│   ├── security_incident.py         # SecurityIncident class
+│   ├── dataset.py                   # Dataset class
+│   └── it_ticket.py                 # ITTicket class
+│
+├── pages/                           # Week 9 - Streamlit pages
+│   ├── Dashboard.py                 # Main dashboard
+│   ├── Incidents.py                 # Manage incidents (Week 9, OOP Week 11)
+│   ├── Datasets.py                  # Manage datasets
+│   ├── Tickets.py                   # Manage tickets
+│   ├── Data_Analytics.py            # Charts and graphs
+│   └── AI_Assistant.py              # Week 10 - Chat with AI
+│
+└── DATA/                            # Week 8, 11 - Data storage
+    └── intelligence_platform.db     # SQLite database (57 incidents, 28 datasets, 42 tickets)
+```
+
 ## Project Progress
 
 ### Week 7: User Authentication (Completed)
@@ -286,7 +329,13 @@ streamlit run Home.py
 
 4. Open your browser and go to the URL shown (usually http://localhost:8501)
 
-5. Login or create an account!
+5. Login with test logins:
+
+**Test User Accounts:**
+- **Username:** `jsmith` | **Password:** `Secure2024!`
+- **Username:** `mbrown` | **Password:** `Password123!`
+
+Or create your own account using the Register tab
 
 ## Requirements
 
