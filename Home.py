@@ -2,7 +2,11 @@
 # This is the main entry point for the Streamlit web app
 
 import streamlit as st
-from app.services.user_service import login_user, register_user, validate_username, validate_password, get_user_by_username
+from app.services.user_service import register_user, validate_username, validate_password, verify_password
+from app.services.database_manager import DatabaseManager
+
+# Week 11 - Create DatabaseManager instance for OOP
+db_manager = DatabaseManager()
 
 # Page configuration
 st.set_page_config(
@@ -89,10 +93,10 @@ else:
                 if not username or not password:
                     st.error("❌ Please fill in all fields.")
                 else:
-                    user = get_user_by_username(username)
+                    # Week 11 - Use DatabaseManager to get User object
+                    user = db_manager.get_user_by_username(username)
                     if user:
-                        from app.services.user_service import verify_password
-                        if verify_password(password, user[2]):
+                        if verify_password(password, user.get_password_hash()):
                             # Clear registration success flags BEFORE setting logged in
                             st.session_state.show_registration_success = False
                             st.session_state.registered_username = None
@@ -128,10 +132,10 @@ else:
                     if not username or not password:
                         st.error("❌ Please fill in all fields.")
                     else:
-                        user = get_user_by_username(username)
+                        # Week 11 - Use DatabaseManager to get User object
+                        user = db_manager.get_user_by_username(username)
                         if user:
-                            from app.services.user_service import verify_password
-                            if verify_password(password, user[2]):
+                            if verify_password(password, user.get_password_hash()):
                                 st.session_state.logged_in = True
                                 st.session_state.username = username
                                 st.rerun()

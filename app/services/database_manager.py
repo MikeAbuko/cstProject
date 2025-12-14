@@ -226,22 +226,49 @@ class DatabaseManager:
         Returns:
             list - list of Dataset objects
         """
-        sql = "SELECT id, name, size_bytes, rows, source, format FROM datasets_metadata ORDER BY id"
+        sql = "SELECT id, dataset_name, file_size_mb, record_count, source, category FROM datasets_metadata ORDER BY id DESC"
         rows = self.fetch_all(sql)
         
         datasets = []
         for row in rows:
+            # Convert MB to bytes for Dataset class
+            size_bytes = int(row[2] * 1024 * 1024) if row[2] else 0
             dataset = Dataset(
                 dataset_id=row[0],
                 name=row[1],
-                size_bytes=row[2],
+                size_bytes=size_bytes,
                 rows=row[3],
                 source=row[4],
-                format_type=row[5] if len(row) > 5 else None
+                format_type=row[5]
             )
             datasets.append(dataset)
         
         return datasets
+    
+    def insert_dataset(self, dataset_name, category, source, last_updated, record_count, file_size_mb):
+        """
+        Insert a new dataset into database
+        
+        Parameters:
+            dataset_name (str) - name of dataset
+            category (str) - dataset category
+            source (str) - where dataset came from
+            last_updated (str) - when it was updated
+            record_count (int) - number of records
+            file_size_mb (float) - size in megabytes
+            
+        Returns:
+            int - ID of newly created dataset
+        """
+        sql = """
+        INSERT INTO datasets_metadata 
+        (dataset_name, category, source, last_updated, record_count, file_size_mb)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """
+        cursor = self.execute_query(sql, (
+            dataset_name, category, source, last_updated, record_count, file_size_mb
+        ))
+        return cursor.lastrowid
     
     # TICKET OPERATIONS 
     
@@ -252,20 +279,100 @@ class DatabaseManager:
         Returns:
             list - list of ITTicket objects
         """
-        sql = "SELECT id, title, priority, status, category, assigned_to, created_date FROM it_tickets ORDER BY id DESC"
+        sql = "SELECT id, ticket_id, subject, priority, status, category, assigned_to, created_date FROM it_tickets ORDER BY id DESC"
         rows = self.fetch_all(sql)
         
         tickets = []
         for row in rows:
             ticket = ITTicket(
-                ticket_id=row[0],
-                title=row[1],
-                priority=row[2],
-                status=row[3],
-                category=row[4] if len(row) > 4 else None,
-                assigned_to=row[5] if len(row) > 5 else None,
-                created_date=row[6] if len(row) > 6 else None
+                ticket_id=row[0],  # database id
+                title=row[2],  # subject
+                priority=row[3],
+                status=row[4],
+                category=row[5],
+                assigned_to=row[6],
+                created_date=row[7]
             )
             tickets.append(ticket)
         
         return tickets
+    
+    def get_ticket_by_id(self, ticket_id) -> Optional[ITTicket]:
+        """
+        Get one ticket by ID
+        
+        Parameters:
+            ticket_id (int) - ticket ID
+            
+        Returns:
+            ITTicket object or None
+        """
+        sql = "SELECT id, ticket_id, subject, priority, status, category, assigned_to, created_date FROM it_tickets WHERE id = ?"
+        row = self.fetch_one(sql, (ticket_id,))
+        
+        if row:
+            return ITTicket(
+                ticket_id=row[0],
+                title=row[2],
+                priority=row[3],
+                status=row[4],
+                category=row[5],
+                assigned_to=row[6],
+                created_date=row[7]
+            )
+        return None
+    
+    def insert_ticket(self, ticket_id, priority, status, category, subject, description, created_date, resolved_date=None, assigned_to=None):
+        """
+        Insert a new ticket
+        
+        Parameters:
+            ticket_id (str) - ticket ID
+            priority (str) - priority
+            status (str) - status
+            category (str) - category
+            subject (str) - subject
+            description (str) - description
+            created_date (str) - date created
+            resolved_date (str) - date resolved (optional)
+            assigned_to (str) - assigned to (optional)
+            
+        Returns:
+            int - new ticket database ID
+        """
+        sql = """
+        INSERT INTO it_tickets 
+        (ticket_id, priority, status, category, subject, description, created_date, resolved_date, assigned_to)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
+        cursor = self.execute_query(sql, (ticket_id, priority, status, category, subject, description, created_date, resolved_date, assigned_to))
+        return cursor.lastrowid
+    
+    def update_ticket_status(self, ticket_id, new_status):
+        """
+        Update ticket status
+        
+        Parameters:
+            ticket_id (int) - ticket database ID
+            new_status (str) - new status
+            
+        Returns:
+            int - rows updated
+        """
+        sql = "UPDATE it_tickets SET status = ? WHERE id = ?"
+        cursor = self.execute_query(sql, (new_status, ticket_id))
+        return cursor.rowcount
+    
+    def delete_ticket(self, ticket_id):
+        """
+        Delete a ticket
+        
+        Parameters:
+            ticket_id (int) - ticket database ID
+            
+        Returns:
+            int - rows deleted
+        """
+        sql = "DELETE FROM it_tickets WHERE id = ?"
+        cursor = self.execute_query(sql, (ticket_id,))
+        return cursor.rowcount

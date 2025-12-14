@@ -1,16 +1,12 @@
-# Week 9 - Datasets Page (CRUD Operations)
-# Create, Read, Update, Delete dataset metadata
+# Week 9 + 11 - Datasets Page (CRUD Operations - OOP Version)
+# Create, Read, Update, Delete dataset metadata using OOP
 
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-# Import Week 8 functions
-from app.data.datasets import (
-    get_all_datasets,
-    insert_dataset,
-    update_dataset_records,
-    delete_dataset
-)
+# Week 11 - Import OOP classes
+from app.services.database_manager import DatabaseManager
+from models.dataset import Dataset
 
 # Page configuration
 st.set_page_config(
@@ -25,6 +21,9 @@ if 'logged_in' not in st.session_state or not st.session_state.logged_in:
     st.info("👈 Go to Home page to login")
     st.stop()
 
+# Week 11 - Create OOP instance
+db_manager = DatabaseManager()
+
 # Main page
 st.title("📁 Datasets Management")
 st.markdown("Create, view, update, and delete dataset metadata")
@@ -32,16 +31,30 @@ st.markdown("Create, view, update, and delete dataset metadata")
 # Tabs for different operations
 tab1, tab2, tab3, tab4 = st.tabs(["📋 View All", "➕ Add New", "✏️ Update", "🗑️ Delete"])
 
-# TAB 1: View All Datasets
+# TAB 1: View All Datasets (OOP Version)
 with tab1:
     st.subheader("All Datasets")
     
     try:
-        df = get_all_datasets()
+        # Week 11 - Get datasets as objects
+        datasets = db_manager.get_all_datasets()
         
-        if df.empty:
+        if not datasets:
             st.info("No datasets found. Add some datasets using the 'Add New' tab.")
         else:
+            # Convert objects to DataFrame for display
+            dataset_dicts = []
+            for dataset in datasets:
+                dataset_dicts.append({
+                    'id': dataset.get_id(),
+                    'dataset_name': dataset.get_name(),
+                    'category': dataset.get_format(),
+                    'source': dataset.get_source(),
+                    'record_count': dataset.get_rows(),
+                    'file_size_mb': round(dataset.calculate_size_mb(), 2)
+                })
+            df = pd.DataFrame(dataset_dicts)
+            
             # Filter by category
             col1, col2, col3 = st.columns(3)
             
@@ -104,7 +117,8 @@ with tab2:
                 st.error("❌ Dataset Name and Source are required!")
             else:
                 try:
-                    id = insert_dataset(
+                    # Week 11 - Use OOP method
+                    id = db_manager.insert_dataset(
                         dataset_name=dataset_name,
                         category=category,
                         source=source,

@@ -1,16 +1,12 @@
-# Week 9 - Tickets Page (CRUD Operations)
-# Create, Read, Update, Delete IT support tickets
+# Week 9 + 11 - Tickets Page (CRUD Operations - OOP Version)
+# Create, Read, Update, Delete IT support tickets using OOP
 
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-# Import Week 8 functions
-from app.data.tickets import (
-    get_all_tickets,
-    insert_ticket,
-    update_ticket_status,
-    delete_ticket
-)
+# Week 11 - Import OOP classes
+from app.services.database_manager import DatabaseManager
+from models.it_ticket import ITTicket
 
 # Page configuration
 st.set_page_config(
@@ -25,6 +21,9 @@ if 'logged_in' not in st.session_state or not st.session_state.logged_in:
     st.info("👈 Go to Home page to login")
     st.stop()
 
+# Week 11 - Create OOP instance
+db_manager = DatabaseManager()
+
 # Main page
 st.title("🎫 IT Support Tickets Management")
 st.markdown("Create, view, update, and delete IT support tickets")
@@ -32,16 +31,30 @@ st.markdown("Create, view, update, and delete IT support tickets")
 # Tabs for different operations
 tab1, tab2, tab3, tab4 = st.tabs(["📋 View All", "➕ Add New", "✏️ Update", "🗑️ Delete"])
 
-# TAB 1: View All Tickets
+# TAB 1: View All Tickets (OOP Version)
 with tab1:
     st.subheader("All IT Tickets")
     
     try:
-        df = get_all_tickets()  # Uses function from app/data/tickets.py
+        # Week 11 - Get tickets as objects
+        tickets = db_manager.get_all_tickets()
         
-        if df.empty:
+        if not tickets:
             st.info("No tickets found. Add some tickets using the 'Add New' tab.")
         else:
+            # Convert objects to DataFrame for display
+            ticket_dicts = []
+            for ticket in tickets:
+                ticket_dicts.append({
+                    'id': ticket.get_id(),
+                    'title': ticket.get_title(),
+                    'priority': ticket.get_priority(),
+                    'status': ticket.get_status(),
+                    'category': ticket.get_category(),
+                    'assigned_to': ticket.get_assigned_to(),
+                    'created_date': ticket.get_created_date()
+                })
+            df = pd.DataFrame(ticket_dicts)
             # Filter by status
             col1, col2, col3 = st.columns(3)
             with col1:
@@ -112,8 +125,8 @@ with tab2:
                 st.error("❌ Ticket ID and Subject are required!")
             else:
                 try:
-                    # Use insert_ticket function
-                    id = insert_ticket(
+                    # Week 11 - Use OOP method to insert
+                    id = db_manager.insert_ticket(
                         ticket_id=ticket_id,
                         priority=priority,
                         status=status,
@@ -128,46 +141,50 @@ with tab2:
                 except Exception as e:
                     st.error(f"❌ Error creating ticket: {e}")
 
-# TAB 3: Update Ticket
+# TAB 3: Update Ticket (OOP Version)
 with tab3:
     st.subheader("Update Ticket Status")
     
     try:
-        df = get_all_tickets()
+        # Week 11 - Get tickets as objects
+        tickets = db_manager.get_all_tickets()
         
-        if df.empty:
+        if not tickets:
             st.info("No tickets to update.")
         else:
-            # Select ticket to update
-            ticket_options = {f"ID {row['id']}: {row['ticket_id']} - {row['subject']}": row['id'] 
-                             for _, row in df.iterrows()}
+            # Select ticket using objects
+            ticket_options = {}
+            for ticket in tickets:
+                label = f"ID {ticket.get_id()}: {ticket.get_title()}"
+                ticket_options[label] = ticket.get_id()
+            
             selected = st.selectbox("Select Ticket to Update", list(ticket_options.keys()))
             
             if selected:
                 ticket_db_id = ticket_options[selected]
-                ticket = df[df['id'] == ticket_db_id].iloc[0]
+                selected_ticket = db_manager.get_ticket_by_id(ticket_db_id)
                 
                 st.markdown("### Current Ticket Details")
-                st.write(f"**Ticket ID:** {ticket['ticket_id']}")
-                st.write(f"**Subject:** {ticket['subject']}")
-                st.write(f"**Current Status:** {ticket['status']}")
-                st.write(f"**Priority:** {ticket['priority']}")
+                st.write(f"**Title:** {selected_ticket.get_title()}")
+                st.write(f"**Current Status:** {selected_ticket.get_status()}")
+                st.write(f"**Priority:** {selected_ticket.get_priority()}")
+                st.write(f"**Category:** {selected_ticket.get_category()}")
                 
                 with st.form("update_ticket_form"):
                     new_status = st.selectbox(
                         "New Status",
                         ["Open", "In Progress", "Resolved", "Closed"],
-                        index=["Open", "In Progress", "Resolved", "Closed"].index(ticket['status'])
+                        index=["Open", "In Progress", "Resolved", "Closed"].index(selected_ticket.get_status())
                     )
                     
                     update_btn = st.form_submit_button("Update Status", type="primary", use_container_width=True)
                     
                     if update_btn:
                         try:
-                            # Use update_ticket_status function
-                            rows = update_ticket_status(ticket_db_id, new_status)
+                            # Week 11 - Use OOP method
+                            rows = db_manager.update_ticket_status(ticket_db_id, new_status)
                             if rows > 0:
-                                st.success(f"✅ Ticket {ticket['ticket_id']} updated to {new_status}!")
+                                st.success(f"✅ Ticket updated to {new_status}!")
                                 st.rerun()
                             else:
                                 st.error("❌ Failed to update ticket")
@@ -177,48 +194,49 @@ with tab3:
     except Exception as e:
         st.error(f"Error: {e}")
 
-# TAB 4: Delete Ticket
+# TAB 4: Delete Ticket (OOP Version)
 with tab4:
     st.subheader("Delete Ticket")
     st.warning("⚠️ This action cannot be undone!")
     
     try:
-        df = get_all_tickets()
+        # Week 11 - Get tickets as objects
+        tickets = db_manager.get_all_tickets()
         
-        if df.empty:
+        if not tickets:
             st.info("No tickets to delete.")
         else:
-            # Select ticket to delete
-            ticket_options = {f"ID {row['id']}: {row['ticket_id']} - {row['subject']}": row['id'] 
-                             for _, row in df.iterrows()}
+            # Select ticket using objects
+            ticket_options = {}
+            for ticket in tickets:
+                label = f"ID {ticket.get_id()}: {ticket.get_title()}"
+                ticket_options[label] = ticket.get_id()
+            
             selected = st.selectbox("Select Ticket to Delete", list(ticket_options.keys()))
             
             if selected:
                 ticket_db_id = ticket_options[selected]
-                ticket = df[df['id'] == ticket_db_id].iloc[0]
+                selected_ticket = db_manager.get_ticket_by_id(ticket_db_id)
                 
                 # Show ticket details
                 st.markdown("### Ticket Details")
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.write(f"**Ticket ID:** {ticket['ticket_id']}")
-                    st.write(f"**Subject:** {ticket['subject']}")
-                    st.write(f"**Priority:** {ticket['priority']}")
-                    st.write(f"**Status:** {ticket['status']}")
+                    st.write(f"**Title:** {selected_ticket.get_title()}")
+                    st.write(f"**Priority:** {selected_ticket.get_priority()}")
+                    st.write(f"**Status:** {selected_ticket.get_status()}")
                 with col2:
-                    st.write(f"**Category:** {ticket['category']}")
-                    st.write(f"**Created:** {ticket['created_date']}")
-                    st.write(f"**Assigned To:** {ticket.get('assigned_to', 'Unassigned')}")
-                
-                st.write(f"**Description:** {ticket['description']}")
+                    st.write(f"**Category:** {selected_ticket.get_category()}")
+                    st.write(f"**Created:** {selected_ticket.get_created_date()}")
+                    st.write(f"**Assigned To:** {selected_ticket.get_assigned_to()}")
                 
                 # Confirm deletion
                 if st.button("🗑️ Delete This Ticket", type="primary", use_container_width=True):
                     try:
-                        # Use delete_ticket function
-                        rows = delete_ticket(ticket_db_id)
+                        # Week 11 - Use OOP method
+                        rows = db_manager.delete_ticket(ticket_db_id)
                         if rows > 0:
-                            st.success(f"✅ Ticket {ticket['ticket_id']} deleted successfully!")
+                            st.success(f"✅ Ticket deleted successfully!")
                             st.rerun()
                         else:
                             st.error("❌ Failed to delete ticket")

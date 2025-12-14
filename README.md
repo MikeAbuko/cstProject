@@ -219,6 +219,13 @@ Created 4 entity classes in the `models/` folder:
 Also created service classes:
 - `DatabaseManager` - handles all database stuff, returns objects instead of dictionaries
 - `AIAssistant` - the upgraded AI that can use multiple providers
+- `AuthManager` - handles user authentication with validation rules
+
+Three domain pages now use these OOP classes:
+- `Home.py` uses User objects and AuthManager
+- `pages/Incidents.py` uses SecurityIncident objects
+- `pages/Datasets.py` uses Dataset objects
+- `pages/IT_Operations.py` uses ITTicket objects
 
 Why? Because it makes code cleaner and more organized! Plus I learned encapsulation (hiding data with private attributes).
 
@@ -378,3 +385,28 @@ Or create your own account using the Register tab
 5. Don't upload secrets.toml to GitHub! (it's already in .gitignore)
 
 **Note:** The AI still works with just HuggingFace (Week 10 setup), but adding Groq and SerpAPI (Week 11) makes it much better!
+
+---
+
+## Final Improvements Analytics
+
+Made the analytics page with real problem-solving insights:
+
+**Incidents Tab:**
+- Time chart showing when Phishing attacks spiked (not just counts!)
+- Calculates how many days each threat type takes to fix
+- Shows which high-severity incidents are still open (the backlog problem)
+
+**Tickets Tab:**
+- See which staff member has the most open tickets
+- Calculates average resolution time by person
+- Shows performance anomalies automatically
+
+**Datasets Tab:**
+- Recommends which big datasets should be archived (>100MB)
+- Shows which department uses the most storage
+- Checks for quality issues (weird file sizes)
+
+Now the charts don't just show data - they tell you what's wrong and what to fix! All the important findings show up in colored warning/information boxes.
+
+---
